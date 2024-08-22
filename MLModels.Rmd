@@ -1,0 +1,314 @@
+---
+title: "purchasePredictionRFModel"
+output: html_document
+date: "2024-07-22"
+---
+
+## Load library packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(caret)
+library(caretEnsemble)
+library(randomForest)
+library(dplyr)
+library(partykit)
+library(xgboost)
+library(mlbench)
+library(e1071)
+library(ggplot2)
+library(glmnet)
+
+
+```
+
+## Import data
+```{r}
+data11 <- read.csv("modelData.csv", header=T, stringsAsFactors = T)
+```
+
+## Split data into training and testing
+
+```{r}
+set.seed(123)
+validation_index <- createDataPartition(data11$noPurchaseProbability, p=0.80, list=FALSE)
+traindata <- data11[validation_index,] ### Training dataset
+testdata <- data11[-validation_index,] ### Testing dataset
+
+write.csv(traindata, "traindata.csv")
+write.csv(testdata, "testdata.csv")
+
+
+```
+
+
+```{r}
+TrainSet <- read.csv("traindata.csv", header = TRUE, stringsAsFactors = T)
+TrainSet <- TrainSet[,-1]
+```
+
+## Correct date data type
+## TrainSet$date <- as.Date(TrainSet$date, format= "%d/%m/%Y")
+
+```{r}
+TrainSet$date <- as.Date(TrainSet$date)
+```
+
+
+```{r}
+TestSet <- read.csv("testdata.csv", header = T, stringsAsFactors = T)
+```
+
+
+```{r}
+TestSet <- TestSet[,-1]
+```
+
+
+```{r}
+TestSet$date <- as.Date(TestSet$date)
+```
+
+```{r}
+View(TrainSet)
+View(TestSet)
+```
+
+```{r}
+TrainSet <- na.omit(TrainSet)
+```
+ 
+
+### Simple RF Algorithm churnModel <- randomForest(churnRate ~ date+asin+product.name+productCategory , data = TrainSet, ntree = 500, mtry = 4, importance = TRUE) --- (Not used)
+
+# Random Forest Algorithm
+### Apply Training Method
+ 
+```{r}
+control <- trainControl(method="repeatedcv", number=5, repeats = 3)
+metric <-"RMSE"
+```
+
+
+
+### Train in RF
+
+```{r}
+set.seed(71)
+purchasePredictionModel <- train(noPurchaseProbability ~ date+asin+product.name+productCategory, data=TrainSet, method="rf", metric=metric, 
+trControl=control)
+
+```
+
+
+```{r}
+summary(purchasePredictionModel)
+```
+
+
+### for validating the important variable for random forest
+
+```{r}
+importance <- varImp(purchasePredictionModel)
+plot(importance)
+```
+
+### for plotting the importance of variable 
+```{r}
+plot(purchasePredictionModel)
+```
+### Prediction using validation data
+
+```{r}
+predictions <- predict(purchasePredictionModel, TestSet)
+predictions
+
+```
+
+
+### Print Model Summary
+
+```{r}
+print(purchasePredictionModel)
+```
+## Model Plot for RF
+```{r}
+actual_values <- TestSet$noPurchaseProbability
+predicted_values <- predictions
+```
+
+
+```{r}
+plot_data <- data.frame(Actual = actual_values, Predicted = predicted_values)
+```
+
+```{r}
+LRPlot <- ggplot(plot_data, aes(x=Actual, y=Predicted))+geom_point(color="red")+geom_abline(slope=1, intercept=0, color="black", linetype="dashed")+labs(title="Random Forest Actual vs Predicted", x="Actual No Purchase Probability", y="Predicted No Purchase Probability")+theme_minimal()
+LRPlot
+```
+
+
+
+### Plot Model
+`
+`
+# Support Vector Machine Algorithm
+
+## Train the Support Vector Machine
+
+
+```{r}
+set.seed(101)
+purchasePredictionModelSVM <- svm(noPurchaseProbability ~ date+asin+product.name+productCategory, data=TrainSet, metric=metric, trControl=control)
+```
+
+
+
+```{r}
+predictionsSVM <- round(predict(purchasePredictionModelSVM, TestSet),2)
+predictionsSVM
+```
+
+## Model Plot for SVM
+```{r}
+actual_valuesSVM <- TestSet$noPurchaseProbability
+predicted_valuesSVM <- predictionsSVM
+```
+
+
+```{r}
+plot_data <- data.frame(ActualSVM = actual_valuesSVM, PredictedSVM = predicted_valuesSVM)
+```
+
+```{r}
+svmPlot <- ggplot(plot_data, aes(x=ActualSVM, y=PredictedSVM))+geom_point(color="blue")+geom_abline(slope=1, intercept=0, color="green", linetype="dashed")+labs(title="SVM Regression Actual vs Predicted", x="Actual No Purchase Probability", y="Predicted No Purchase Probability")+theme_minimal()
+svmPlot
+```
+### Residual
+
+```{r}
+residualsSVM = actual_values-predicted_values
+```
+
+```{r}
+residualSVM_data <-data.frame(Actual = actual_values, Predicted = predicted_values, Residuals=residualsSVM)
+```
+
+
+```{r}
+svmResidualPlot <- ggplot(residualSVM_data, aes(x=Predicted, y=Residuals))+geom_point(color="blue")+geom_hline(yintercept=0, color="red", linetype="dashed")+labs(title="Residual Plot for SVM Model",x="Predicted No Purchase Probability", y="Residuals")+theme_minimal()
+svmResidualPlot
+```
+
+
+### Generate evaluation (MAE and RMSE)
+ 
+```{r}
+maeSVM <- round(mean(abs(TestSet$noPurchaseProbability - predictionsSVM)),15)
+```
+
+```{r}
+rmseSVM <- round(sqrt(mean(abs(TestSet$noPurchaseProbability - predictionsSVM)^2)),15)
+
+```
+
+### Generate evaluation (R Squared)
+```{r}
+ss_total <- sum((TestSet$noPurchaseProbability-mean(TestSet$noPurchaseProbability))^2)
+```
+
+```{r}
+ss_residualSVM <- sum((TestSet$noPurchaseProbability-predictionsSVM)^2)
+```
+
+```{r}
+r_squaredSVM <- 1-(ss_residualSVM/ss_total)
+```
+
+### Print MAE, RMSE and R Squared
+```{r}
+cat("Support Vector Machine:\n")
+cat("MAE:", maeSVM, "\n")
+cat("RMSE:", rmseSVM,"\n")
+cat("RSquared:", r_squaredSVM,"\n\n")
+```
+
+```{r}
+summary(purchasePredictionModelSVM)
+
+```
+
+# Train the Linear Regression (Ridge Regression)
+
+## Define the train control (ease of parameter tunning)
+```{r}
+train_control <- trainControl(method = "cv", number=5)
+```
+
+## Set aplha to 0 for Ridge Regression
+```{r}
+tune_grid <- expand.grid(alpha =0, lambda=seq(0,1,by=0.1))
+```
+
+## Train the linear regression model
+```{r}
+purchasePredictionModelLR <- train(noPurchaseProbability ~ date+asin+product.name+productCategory, data=TrainSet, metric=metric,method="glmnet", trControl=train_control, tuneGrid=tune_grid)
+```
+
+## Plot the best tune values for alpha and lambda
+```{r}
+print(purchasePredictionModelLR$bestTune)
+```
+
+## Print the evaluation values
+```{r}
+print(purchasePredictionModelLR)
+```
+
+
+## Print the outcome
+```{r}
+summary(purchasePredictionModelLR)
+```
+## Plot the outcome
+```{r}
+plot(purchasePredictionModelLR)
+```
+## Make predictions
+```{r}
+purchasePredictionsLR <- round(predict(purchasePredictionModelLR, TestSet),2)
+purchasePredictionsLR
+```
+
+## Model Plot for LR
+```{r}
+actual_valuesLR <- TestSet$noPurchaseProbability
+predicted_valuesLR <- purchasePredictionsLR
+```
+
+
+```{r}
+plot_data <- data.frame(ActualLR = actual_valuesLR, PredictedLR = predicted_valuesLR)
+```
+
+```{r}
+LRPlot <- ggplot(plot_data, aes(x=ActualLR, y=PredictedLR))+geom_point(color="blue")+geom_abline(slope=1, intercept=0, color="red", linetype="dashed")+labs(title="Linear Regression Actual vs Predicted", x="Actual No Purchase Probability", y="Predicted No Purchase Probability")+theme_minimal()
+LRPlot
+```
+
+### Residual
+
+```{r}
+residualsLR = actual_values-predicted_valuesLR
+```
+
+```{r}
+residualLR_data <-data.frame(Actual = actual_values, Predicted = predicted_values, Residuals=residualsLR)
+```
+
+
+```{r}
+LRResidualPlot <- ggplot(residualSVM_data, aes(x=Predicted, y=Residuals))+geom_point(color="purple")+geom_hline(yintercept=0, color="black", linetype="dashed")+labs(title="Residual Plot for LR Model",x="Predicted No Purchase Probability", y="Residuals")+theme_minimal()
+LRResidualPlot
+```

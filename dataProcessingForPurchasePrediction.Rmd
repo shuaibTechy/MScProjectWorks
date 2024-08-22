@@ -1,0 +1,126 @@
+---
+title: "churnDataPreprocessing"
+output: html_document
+date: "2024-07-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dtplyr)
+library(ggplot2)
+library(tidyverse)
+library(timeDate)
+
+```
+
+```{r}
+mlData <- read.csv("cleanedDatasetV1.csv", header = T, stringsAsFactors = T)
+```
+
+
+```{r}
+dim(mlData)
+```
+## Remove all rows with empty cells
+```{r}
+mlData <- na.omit(mlData)
+
+```
+`
+
+
+## Deduce the Purchase/Not Purchase column from the target column
+
+```{r}
+mlData1 <- mlData%>%
+mutate(Purchase = case_when(target == "p" ~  "Purchase", 
+                              target == "n" ~  "No Purchase"))
+```
+
+
+
+## Change the date column from factor to date datatype
+## mlData1$date <- as.Date(mlData1$date)
+
+
+```{r}
+mlData1$date <- as.Date(mlData1$date, format= "%d/%m/%Y")
+```
+
+
+```{r}
+dim(mlData1)
+```
+## We have produced the Purchase column
+
+```{r}
+
+
+mlData1$Purchase <- as.factor(mlData1$Purchase)
+
+
+```
+
+
+## Create and add the Product category column
+```{r}
+mlData11 <- mlData1%>%
+mutate(productCategory = case_when(asin == "1524763136" ~  "Book", 
+                              asin == "B07PGL2N7J" ~  "Electronics",
+                              asin == "B005OCFGTO" ~  "Movie",
+                              asin == "B06X9T1Y3F" ~  "Curcumin",
+                              asin == "B07XC6WRJQ" ~  "Food",
+                              asin == "B088C2WD5F" ~  "Mask",
+                              TRUE ~  "Perfumes"))
+```
+
+
+```{r}
+dim(mlData11)
+```
+
+
+```{r}
+mlData11$productCategory <- as.factor(mlData11$productCategory)
+```
+
+
+
+
+```{r}
+mlData111 <- mlData11%>% group_by(productCategory)%>%mutate(categoryPurchase=sum(Purchase == "Purchase"))
+```
+
+
+```{r}
+mlData1111 <- mlData111%>% group_by(productCategory)%>%mutate(categoryNoPurchase=sum(Purchase == "No Purchase"))
+```
+
+
+```{r}
+mlData11111 <- mlData1111%>%
+mutate(noPurchaseProbability = case_when(productCategory == "Book" ~ categoryNoPurchase/4999, 
+                          productCategory == "Movie" ~ categoryNoPurchase/4999, 
+                          productCategory == "Electronics" ~ categoryNoPurchase/4999,
+                          productCategory == "Curcumin" ~ categoryNoPurchase/4999,
+                          productCategory == "Food" ~ categoryNoPurchase/4999, 
+                          productCategory == "Mask" ~ categoryNoPurchase/4187, 
+                          productCategory == "Perfumes" ~ categoryNoPurchase/5000,
+                         ))
+```
+
+
+```{r}
+mlData11111$noPurchaseProbability <- round(mlData11111$noPurchaseProbability,2)
+```
+
+
+
+
+```{r}
+write.csv(mlData11111,"modelData.csv")
+```
+
